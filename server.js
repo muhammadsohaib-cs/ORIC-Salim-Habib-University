@@ -36,11 +36,38 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static file serving
-app.use(express.static(__dirname));
+// Root directory resolution (process.cwd() on Vercel, __dirname locally)
+const rootDir = process.cwd();
+const indexPath = path.join(rootDir, 'index.html');
+
+const sendIndex = (req, res) => {
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error sending index.html:', err);
+      if (!res.headersSent) {
+        try {
+          const html = fs.readFileSync(indexPath, 'utf8');
+          res.setHeader('Content-Type', 'text/html');
+          res.send(html);
+        } catch (e) {
+          res.status(500).send('Error loading platform interface: ' + e.message);
+        }
+      }
+    }
+  });
+};
+
+app.get('/', sendIndex);
+app.get('/index.html', sendIndex);
+
+// Explicit static assets routing with cache headers
+app.use('/css', express.static(path.join(rootDir, 'css'), { maxAge: '1d' }));
+app.use('/js', express.static(path.join(rootDir, 'js'), { maxAge: '1d' }));
+app.use('/data', express.static(path.join(rootDir, 'data'), { maxAge: '1d' }));
+app.use(express.static(rootDir, { maxAge: '1d' }));
 
 const os = require('os');
-const uploadDir = process.env.VERCEL ? os.tmpdir() : path.join(__dirname, 'uploads');
+const uploadDir = process.env.VERCEL ? os.tmpdir() : path.join(rootDir, 'uploads');
 if (!process.env.VERCEL && !fs.existsSync(uploadDir)) {
   try {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -72,7 +99,7 @@ const upload = multer({
 });
 
 // Paths to data files
-const dataDir = path.join(__dirname, 'data');
+const dataDir = path.join(rootDir, 'data');
 const projectsFile = path.join(dataDir, 'oric_projects_db.json');
 const areasFile = path.join(dataDir, 'karachi_industrial_areas.json');
 const sectorsFile = path.join(dataDir, 'industrial_sectors.json');
@@ -695,6 +722,14 @@ Respond with valid JSON:
     console.error('Upload processing error:', err);
     res.status(500).json({ error: 'Failed to process document upload: ' + err.message });
   }
+});
+
+// SPA catch-all fallback (Express 5 compatible)
+app.use((req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found: ' + req.path });
+  }
+  sendIndex(req, res);
 });
 
 // Start Express Server only when run directly (not in Vercel serverless functions)
