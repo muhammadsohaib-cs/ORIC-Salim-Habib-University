@@ -39,10 +39,14 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static file serving
 app.use(express.static(__dirname));
 
-// Multer storage for uploads
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const os = require('os');
+const uploadDir = process.env.VERCEL ? os.tmpdir() : path.join(__dirname, 'uploads');
+if (!process.env.VERCEL && !fs.existsSync(uploadDir)) {
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create upload directory:', e.message);
+  }
 }
 
 const storage = multer.diskStorage({
@@ -693,13 +697,19 @@ Respond with valid JSON:
   }
 });
 
-// Start Express Server
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`  ORIC-IOAP Production Server Active`);
-  console.log(`  Salim Habib University (SHU), Karachi, Pakistan`);
-  console.log(`  Google Gemini AI: CONNECTED & ONLINE`);
-  console.log(`  Access the platform at: http://localhost:${PORT}`);
-  console.log(`  Total Projects in Database: ${projects.length}`);
-  console.log(`=======================================================`);
-});
+// Start Express Server only when run directly (not in Vercel serverless functions)
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  if (require.main === module) {
+    app.listen(PORT, () => {
+      console.log(`=======================================================`);
+      console.log(`  ORIC-IOAP Production Server Active`);
+      console.log(`  Salim Habib University (SHU), Karachi, Pakistan`);
+      console.log(`  Google Gemini AI: CONNECTED & ONLINE`);
+      console.log(`  Access the platform at: http://localhost:${PORT}`);
+      console.log(`  Total Projects in Database: ${projects.length}`);
+      console.log(`=======================================================`);
+    });
+  }
+}
+
+module.exports = app;
